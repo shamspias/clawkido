@@ -12,6 +12,12 @@ import (
 	"github.com/openai/openai-go/option"
 )
 
+// Message represents a single turn in conversation history
+type Message struct {
+	Role    string // "system", "user", "assistant"
+	Content string
+}
+
 type Brain struct {
 	Config *config.Config
 	OpenAI *openai.Client
@@ -22,22 +28,20 @@ type Brain struct {
 func NewBrain(cfg *config.Config) (*Brain, error) {
 	b := &Brain{Config: cfg}
 
-	// 1. Initialize OpenAI (Only if Key is present)
+	// Initialize Clients only if keys/URLs are present
 	if cfg.AI.OpenAIKey != "" {
 		client := openai.NewClient(option.WithAPIKey(cfg.AI.OpenAIKey))
 		b.OpenAI = &client
 	}
 
-	// 2. Initialize Ollama (Always if URL is present)
 	if cfg.AI.OllamaURL != "" {
 		client := openai.NewClient(
 			option.WithBaseURL(fmt.Sprintf("%s/v1", cfg.AI.OllamaURL)),
-			option.WithAPIKey("ollama"), // Dummy key required by library
+			option.WithAPIKey("ollama"), // Dummy key
 		)
 		b.Ollama = &client
 	}
 
-	// 3. Initialize Groq (Only if Key is present)
 	if cfg.AI.GroqKey != "" {
 		b.Groq = groq.NewClient(cfg.AI.GroqKey)
 	}
@@ -45,47 +49,42 @@ func NewBrain(cfg *config.Config) (*Brain, error) {
 	return b, nil
 }
 
-func (b *Brain) ProcessRequest(ctx context.Context, agentName, prompt string) (string, error) {
-	// Find the agent in config
-	var agent config.AgentConfig
-	found := false
-	for _, a := range b.Config.Agents {
-		if strings.EqualFold(a.Name, agentName) {
-			agent = a
-			found = true
-			break
-		}
-	}
-	if !found {
-		return "", fmt.Errorf("agent '%s' not found", agentName)
-	}
-
-	// Determine Provider (Robust Case-Insensitive Cast)
+// ChatCompletion generates a response based on full history
+func (b *Brain) ChatCompletion(ctx context.Context, agent config.AgentConfig, history []Message) (string, error) {
 	provider := types.ProviderType(strings.ToLower(agent.Provider))
 
 	switch provider {
 	case types.ProviderOpenAI:
-		return b.askOpenAI(ctx, b.OpenAI, agent, prompt)
+		return b.askOpenAI(ctx, b.OpenAI, agent, history)
 	case types.ProviderOllama:
-		return b.askOpenAI(ctx, b.Ollama, agent, prompt) // Ollama uses OpenAI compatible client
+		return b.askOpenAI(ctx, b.Ollama, agent, history) // Ollama uses OpenAI format
 	case types.ProviderGroq:
-		return b.askGroq(ctx, agent, prompt)
+		return b.askGroq(ctx, agent, history)
 	default:
 		return "", fmt.Errorf("unsupported provider: %s", agent.Provider)
 	}
 }
 
-func (b *Brain) askOpenAI(ctx context.Context, client *openai.Client, agent config.AgentConfig, prompt string) (string, error) {
+func (b *Brain) askOpenAI(ctx context.Context, client *openai.Client, agent config.AgentConfig, history []Message) (string, error) {
 	if client == nil {
-		return "", fmt.Errorf("provider client is not initialized (check API key in .env)")
+		return "", fmt.Errorf("provider client is nil (check .env)")
+	}
+
+	// Convert internal history to OpenAI format
+	var messages []openai.ChatCompletionMessageParamUnion
+	for _, msg := range history {
+		if msg.Role == "system" {
+			messages = append(messages, openai.SystemMessage(msg.Content))
+		} else if msg.Role == "user" {
+			messages = append(messages, openai.UserMessage(msg.Content))
+		} else {
+			messages = append(messages, openai.AssistantMessage(msg.Content))
+		}
 	}
 
 	params := openai.ChatCompletionNewParams{
-		Model: openai.ChatModel(agent.ModelName),
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(agent.SystemPrompt),
-			openai.UserMessage(prompt),
-		},
+		Model:       openai.ChatModel(agent.ModelName),
+		Messages:    messages,
 		Temperature: openai.Float(agent.Temperature),
 	}
 
@@ -100,18 +99,27 @@ func (b *Brain) askOpenAI(ctx context.Context, client *openai.Client, agent conf
 	return "", fmt.Errorf("empty response from AI")
 }
 
-func (b *Brain) askGroq(ctx context.Context, agent config.AgentConfig, prompt string) (string, error) {
+func (b *Brain) askGroq(ctx context.Context, agent config.AgentConfig, history []Message) (string, error) {
 	if b.Groq == nil {
-		return "", fmt.Errorf("groq client is not initialized (check GROQ_API_KEY in .env)")
+		return "", fmt.Errorf("groq client is nil (check .env)")
+	}
+
+	// Convert internal history to Groq format
+	var messages []groq.ChatMessage
+	for _, msg := range history {
+		role := groq.RoleUser
+		if msg.Role == "system" {
+			role = groq.RoleSystem
+		} else if msg.Role == "assistant" {
+			role = groq.RoleAssistant
+		}
+		messages = append(messages, groq.ChatMessage{Role: role, Content: msg.Content})
 	}
 
 	temp := agent.Temperature
 	req := groq.ChatCompletionRequest{
-		Model: agent.ModelName,
-		Messages: []groq.ChatMessage{
-			{Role: groq.RoleSystem, Content: agent.SystemPrompt},
-			{Role: groq.RoleUser, Content: prompt},
-		},
+		Model:       agent.ModelName,
+		Messages:    messages,
 		Temperature: &temp,
 	}
 
@@ -123,5 +131,5 @@ func (b *Brain) askGroq(ctx context.Context, agent config.AgentConfig, prompt st
 	if len(resp.Choices) > 0 {
 		return resp.Choices[0].Message.Content, nil
 	}
-	return "", fmt.Errorf("empty response from Groq")
+	return "", fmt.Errorf("empty response from AI")
 }
