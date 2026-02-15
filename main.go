@@ -4,50 +4,57 @@ import (
 	"clawkido/internal/brain"
 	"clawkido/internal/channels"
 	"clawkido/internal/config"
-	"clawkido/internal/engine"
+	"clawkido/internal/swarm"
 	"clawkido/internal/tui"
 	"clawkido/internal/types"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	// 1. Load Configuration (Env -> JSON -> Env Override)
+	// 1. Load .env file
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: No .env file found (relying on system env vars)")
+	}
+
+	// 2. Load Config
 	cfg, err := config.Load("config.json")
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatalf("Critical: Config load failed: %v", err)
 	}
 
-	// 2. Setup Log Channel (Buffer 1000 events)
+	// 3. Setup Logging Channel
 	logChan := make(chan types.LogEntry, 1000)
 
-	// 3. Initialize Brain (Thinking)
+	// 4. Initialize Brain (LLM Connection)
 	brn, err := brain.NewBrain(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize Brain: %v", err)
+		log.Fatalf("Critical: Brain init failed: %v", err)
 	}
 
-	// 4. Initialize Engine (Processing)
-	eng := engine.NewEngine(cfg, brn, logChan)
+	// 5. Initialize Swarm (The Engine)
+	hive := swarm.NewSwarm(cfg, brn, logChan)
 
-	// 5. Initialize Channels (Input/Output)
-	mgr := channels.NewManager(cfg, eng.Inbox, logChan)
+	// 6. Initialize Channels (Telegram, Discord, etc.)
+	// Note: channels.NewManager must accept chan types.Message now
+	mgr := channels.NewManager(cfg, hive.Inbox, logChan)
 
-	// 6. Initialize TUI (Dashboard)
+	// 7. Initialize TUI (Dashboard)
 	dash := tui.NewDashboard(logChan)
 
-	// 7. Start everything
+	// 8. Start Everything
 	go dash.Run()     // Visuals
-	eng.Start()       // Logic
+	hive.Start()      // Logic
 	go mgr.StartAll() // Connectivity
 
-	// 8. Wait for Exit Signal
+	// 9. Keep Alive until Ctrl+C
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
-	eng.Stop()
-	log.Println("System shutting down...")
+	log.Println("Clawkido shutting down...")
 }
