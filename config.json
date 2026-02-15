@@ -1,44 +1,42 @@
 {
   "ai": {
-    "ollama_url": "http://localhost:11434",
-    "openai_key": "",
-    "groq_key": ""
+    "ollama_url": "http://localhost:11434"
   },
   "telegram": {
-    "token": ""
-  },
-  "discord": {
-    "token": ""
+    "allowed_users": [
+      12345678
+    ]
   },
   "agents": [
+    {
+      "name": "manager",
+      "provider": "groq",
+      "model_name": "openai/gpt-oss-120b",
+      "temperature": 0.5,
+      "system_prompt": "You are the Project Manager. specific agent tags like [@coder: instruction] or [@reviewer: instruction] to delegate tasks. Do not write code yourself; delegate it."
+    },
     {
       "name": "coder",
       "provider": "groq",
       "model_name": "openai/gpt-oss-120b",
-      "system_prompt": "You are a senior Go engineer. Be concise and precise.",
-      "temperature": 0.1
+      "temperature": 0.2,
+      "system_prompt": "You are a Senior Software Engineer. You write highly optimized, robust, and scalable code. Output only code or technical explanations."
     },
     {
-      "name": "writer",
+      "name": "reviewer",
       "provider": "ollama",
       "model_name": "gemma3",
-      "system_prompt": "You are a creative writer.",
-      "temperature": 0.7
-    },
-    {
-      "name": "brain",
-      "provider": "groq",
-      "model_name": "openai/gpt-oss-120b",
-      "system_prompt": "You are a generic assistant.",
-      "temperature": 0.5
+      "temperature": 0.3,
+      "system_prompt": "You are a QA Lead. Review code for security vulnerabilities, logic errors, and performance issues."
     }
   ],
   "teams": [
     {
       "name": "dev",
       "members": [
+        "manager",
         "coder",
-        "writer"
+        "reviewer"
       ]
     }
   ]
