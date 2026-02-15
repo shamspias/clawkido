@@ -2,7 +2,6 @@ package types
 
 import "time"
 
-// ProviderType defines the supported AI providers
 type ProviderType string
 
 const (
@@ -11,18 +10,25 @@ const (
 	ProviderGroq   ProviderType = "groq"
 )
 
-// Message is the data packet moving through the system
+// Message represents an input from the outside world (User)
 type Message struct {
-	Platform  string      // "Telegram", "Discord", "Terminal"
-	Sender    string      // User ID or Name
-	Content   string      // The prompt
-	ReplyChan chan string // Channel to send the answer back
+	Platform  string
+	Sender    string
+	Content   string
+	ReplyChan chan string
 }
 
-// LogEntry allows the TUI to display events without blocking the engine
+// Envelope is the internal carrier for Agent-to-Agent communication
+type Envelope struct {
+	Sender    string      // Name of the sender (User or Agent)
+	Content   string      // The instruction/prompt
+	ReplyChan chan string // The channel to send the final result back to the user
+}
+
+// LogEntry for the TUI Dashboard
 type LogEntry struct {
 	Level   string // INFO, ERROR, SUCCESS, DEBUG
-	Source  string // "Engine", "Brain", "Router"
+	Source  string // "Swarm", "Agent:Coder", "Telegram"
 	Message string
 	Time    time.Time
 }
