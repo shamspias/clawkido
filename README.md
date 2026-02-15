@@ -126,6 +126,6 @@ graph TD
     Inbox --> Hive
     Hive -->|Msg| AgentA
     Hive -->|Msg| AgentB
-    AgentA -->|[@agentB]| Hive
+    AgentA -->|agentB| Hive
 
 ```
