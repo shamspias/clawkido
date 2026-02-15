@@ -3,8 +3,7 @@ package config
 import (
 	"encoding/json"
 	"os"
-
-	"github.com/joho/godotenv"
+	"strings"
 )
 
 type Config struct {
@@ -16,25 +15,26 @@ type Config struct {
 }
 
 type AIConfig struct {
-	OpenAIKey string `json:"openai_key"`
-	GroqKey   string `json:"groq_key"`
+	OpenAIKey string `json:"-"` // Loaded from ENV
+	GroqKey   string `json:"-"` // Loaded from ENV
 	OllamaURL string `json:"ollama_url"`
 }
 
 type TelegramConfig struct {
-	Token string `json:"token"`
+	Token        string  `json:"-"` // Loaded from ENV
+	AllowedUsers []int64 `json:"allowed_users"`
 }
 
 type DiscordConfig struct {
-	Token string `json:"token"`
+	Token string `json:"-"` // Loaded from ENV
 }
 
 type AgentConfig struct {
 	Name         string  `json:"name"`
-	Provider     string  `json:"provider"` // "openai", "groq", "ollama"
+	Provider     string  `json:"provider"`
 	ModelName    string  `json:"model_name"`
-	SystemPrompt string  `json:"system_prompt"`
 	Temperature  float64 `json:"temperature"`
+	SystemPrompt string  `json:"system_prompt"`
 }
 
 type TeamConfig struct {
@@ -43,35 +43,26 @@ type TeamConfig struct {
 }
 
 func Load(path string) (*Config, error) {
-	// 1. Load .env file (if present)
-	_ = godotenv.Load()
-
-	// 2. Parse the JSON config file
-	data, err := os.ReadFile(path)
+	// 1. Read JSON Config
+	file, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := json.Unmarshal(file, &cfg); err != nil {
 		return nil, err
 	}
 
-	// 3. Override with Environment Variables (Security Best Practice)
-	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-		cfg.AI.OpenAIKey = key
-	}
-	if key := os.Getenv("GROQ_API_KEY"); key != "" {
-		cfg.AI.GroqKey = key
-	}
-	if url := os.Getenv("OLLAMA_URL"); url != "" {
-		cfg.AI.OllamaURL = url
-	}
-	if token := os.Getenv("TELEGRAM_TOKEN"); token != "" {
-		cfg.Telegram.Token = token
-	}
-	if token := os.Getenv("DISCORD_TOKEN"); token != "" {
-		cfg.Discord.Token = token
+	// 2. Inject Secrets from Environment
+	cfg.AI.OpenAIKey = os.Getenv("OPENAI_API_KEY")
+	cfg.AI.GroqKey = os.Getenv("GROQ_API_KEY")
+	cfg.Telegram.Token = os.Getenv("TELEGRAM_BOT_TOKEN")
+	cfg.Discord.Token = os.Getenv("DISCORD_BOT_TOKEN")
+
+	// 3. Normalize Data
+	for i := range cfg.Agents {
+		cfg.Agents[i].Name = strings.ToLower(cfg.Agents[i].Name)
 	}
 
 	return &cfg, nil
