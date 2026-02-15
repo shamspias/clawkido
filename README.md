@@ -55,21 +55,34 @@ Create a `config.json` in the root directory:
 ```json
 {
   "ai": {
-    "openai_key": "sk-...",
-    "groq_key": "gsk-..."
+    "ollama_url": "http://localhost:11434"
+  },
+  "telegram": {
+    "allowed_users": [
+      12345678
+    ]
   },
   "agents": [
     {
       "name": "manager",
       "provider": "openai",
-      "model": "gpt-4o",
-      "system_prompt": "You are the project manager. Delegate tasks using [@agent: instructions]."
+      "model_name": "gpt-4o",
+      "temperature": 0.5,
+      "system_prompt": "You are the Project Manager. specific agent tags like [@coder: instruction] or [@reviewer: instruction] to delegate tasks. Do not write code yourself; delegate it."
     },
     {
       "name": "coder",
       "provider": "groq",
-      "model": "llama3-70b-8192",
-      "system_prompt": "You are a Golang expert. Write concise, optimized code."
+      "model_name": "openai/gpt-oss-120b",
+      "temperature": 0.2,
+      "system_prompt": "You are a Senior Software Engineer. You write highly optimized, robust, and scalable code. Output only code or technical explanations."
+    },
+    {
+      "name": "reviewer",
+      "provider": "ollama",
+      "model_name": "gemma3",
+      "temperature": 0.3,
+      "system_prompt": "You are a QA Lead. Review code for security vulnerabilities, logic errors, and performance issues."
     }
   ],
   "teams": [
@@ -77,7 +90,8 @@ Create a `config.json` in the root directory:
       "name": "dev",
       "members": [
         "manager",
-        "coder"
+        "coder",
+        "reviewer"
       ]
     }
   ]
