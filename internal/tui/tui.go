@@ -2,58 +2,86 @@ package tui
 
 import (
 	"clawkido/internal/types"
+	"context"
 	"fmt"
+	"strings"
 
 	"github.com/fatih/color"
 )
 
 type Dashboard struct {
-	LogChan <-chan types.LogEntry
+	logChan <-chan types.LogEntry
 }
 
 func NewDashboard(logChan <-chan types.LogEntry) *Dashboard {
-	return &Dashboard{LogChan: logChan}
+	return &Dashboard{logChan: logChan}
 }
 
-func (d *Dashboard) Run() {
-	// Clear screen
+func (d *Dashboard) Run(ctx context.Context) {
 	fmt.Print("\033[H\033[2J")
 
-	// Banner
-	color.Cyan("========================================")
-	color.Cyan("   CLAWKIDO - AI AGENT SWARM SYSTEM     ")
-	color.Cyan("========================================")
+	cyan := color.New(color.FgCyan, color.Bold).SprintFunc()
+	dim := color.New(color.FgHiBlack).SprintFunc()
+
+	fmt.Println(cyan("╔══════════════════════════════════════════════════╗"))
+	fmt.Println(cyan("║       🦞 CLAWKIDO — AI AGENT SWARM ENGINE       ║"))
+	fmt.Println(cyan("╚══════════════════════════════════════════════════╝"))
+	fmt.Println(dim("  Actor-model orchestration • Go • Zero-latency"))
+	fmt.Println(dim("  Press Ctrl+C to shutdown gracefully"))
+	fmt.Println(strings.Repeat("─", 52))
 	fmt.Println()
 
-	// Listen for logs
-	for entry := range d.LogChan {
-		d.printEntry(entry)
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println()
+			color.Yellow("⏹  Swarm shutting down...")
+			return
+		case entry, ok := <-d.logChan:
+			if !ok {
+				return
+			}
+			d.render(entry)
+		}
 	}
 }
 
-func (d *Dashboard) printEntry(e types.LogEntry) {
-	ts := e.Time.Format("15:04:05")
+func (d *Dashboard) render(e types.LogEntry) {
+	ts := color.HiBlackString(e.Time.Format("15:04:05.000"))
 
-	var levelColor func(a ...interface{}) string
-
+	var level string
 	switch e.Level {
 	case "INFO":
-		levelColor = color.New(color.FgBlue).SprintFunc()
+		level = color.BlueString("%-7s", "INFO")
 	case "SUCCESS":
-		levelColor = color.New(color.FgGreen).SprintFunc()
+		level = color.GreenString("%-7s", "OK")
 	case "ERROR":
-		levelColor = color.New(color.FgRed).SprintFunc()
+		level = color.RedString("%-7s", "ERROR")
+	case "WARN":
+		level = color.YellowString("%-7s", "WARN")
 	case "DEBUG":
-		levelColor = color.New(color.FgHiBlack).SprintFunc()
+		level = color.HiBlackString("%-7s", "DEBUG")
 	default:
-		levelColor = color.New(color.FgWhite).SprintFunc()
+		level = color.WhiteString("%-7s", e.Level)
 	}
 
-	// Format: [TIME] [LEVEL] [SOURCE] Message
-	fmt.Printf("%s | %s | %-10s | %s\n",
-		color.WhiteString(ts),
-		levelColor(fmt.Sprintf("%-7s", e.Level)),
-		color.YellowString(e.Source),
-		e.Message,
-	)
+	source := color.CyanString("%-14s", e.Source)
+
+	msg := e.Message
+	if strings.Contains(msg, "@") {
+		msg = highlightMentions(msg)
+	}
+
+	fmt.Printf("%s │ %s │ %s │ %s\n", ts, level, source, msg)
+}
+
+func highlightMentions(text string) string {
+	yellow := color.New(color.FgYellow, color.Bold).SprintFunc()
+	words := strings.Fields(text)
+	for i, w := range words {
+		if strings.HasPrefix(w, "@") {
+			words[i] = yellow(w)
+		}
+	}
+	return strings.Join(words, " ")
 }
