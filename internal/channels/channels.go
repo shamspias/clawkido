@@ -3,43 +3,64 @@ package channels
 import (
 	"clawkido/internal/config"
 	"clawkido/internal/types"
+	"context"
 	"sync"
+	"time"
 )
 
-// Channel defines the interface every platform must follow
+// Channel defines the contract every platform adapter must implement.
 type Channel interface {
-	Start()
+	Name() string
+	Start(ctx context.Context) error
 }
 
+// Manager orchestrates all configured channel adapters.
 type Manager struct {
 	channels []Channel
+	logChan  chan<- types.LogEntry
 }
 
-func NewManager(cfg *config.Config, inbox chan<- types.Message, logs chan<- types.LogEntry) *Manager {
-	mgr := &Manager{}
+func NewManager(cfg *config.Config, inbox chan<- types.Message, logChan chan<- types.LogEntry) *Manager {
+	mgr := &Manager{logChan: logChan}
 
-	// 1. Add Telegram if configured
 	if cfg.Telegram.Token != "" {
-		mgr.channels = append(mgr.channels, NewTelegram(cfg.Telegram.Token, inbox, logs))
+		mgr.channels = append(mgr.channels, NewTelegram(cfg, inbox, logChan))
+		mgr.log("INFO", "Channel:Telegram registered")
 	}
 
-	// 2. Add Discord if configured
 	if cfg.Discord.Token != "" {
-		mgr.channels = append(mgr.channels, NewDiscord(cfg.Discord.Token, inbox, logs))
+		mgr.channels = append(mgr.channels, NewDiscord(cfg.Discord.Token, inbox, logChan))
+		mgr.log("INFO", "Channel:Discord registered")
+	}
+
+	if len(mgr.channels) == 0 {
+		mgr.log("WARN", "No channels configured — running headless")
 	}
 
 	return mgr
 }
 
-func (m *Manager) StartAll() {
+func (m *Manager) StartAll(ctx context.Context) {
 	var wg sync.WaitGroup
+
 	for _, ch := range m.channels {
 		wg.Add(1)
 		go func(c Channel) {
 			defer wg.Done()
-			c.Start()
+			m.log("INFO", "Starting "+c.Name())
+			if err := c.Start(ctx); err != nil {
+				m.log("ERROR", c.Name()+" failed: "+err.Error())
+			}
 		}(ch)
 	}
-	// We don't wait here because channels run forever.
-	// The main function keeps the program alive.
+
+	<-ctx.Done()
+	wg.Wait()
+}
+
+func (m *Manager) log(level, msg string) {
+	select {
+	case m.logChan <- types.LogEntry{Level: level, Source: "ChannelMgr", Message: msg, Time: time.Now()}:
+	default:
+	}
 }
