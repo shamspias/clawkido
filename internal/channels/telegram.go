@@ -117,13 +117,19 @@ func (t *Telegram) drainReplies(bot *tgbotapi.BotAPI, chatID int64, replyChan <-
 			}
 			count++
 
-			msg := tgbotapi.NewMessage(chatID, response)
-			msg.ParseMode = "Markdown"
-			if _, err := bot.Send(msg); err != nil {
-				// Retry without markdown if parsing fails.
-				msg.ParseMode = ""
-				if _, err2 := bot.Send(msg); err2 != nil {
-					t.log("ERROR", fmt.Sprintf("Send failed: %v", err2))
+			// Split long messages to fit Telegram's 4096 char limit.
+			// We use 4000 to leave a safety margin for metadata/formatting.
+			chunks := splitMessage(response, 4000)
+
+			for _, chunk := range chunks {
+				msg := tgbotapi.NewMessage(chatID, chunk)
+				msg.ParseMode = "Markdown"
+				if _, err := bot.Send(msg); err != nil {
+					// Retry without markdown if parsing fails.
+					msg.ParseMode = ""
+					if _, err2 := bot.Send(msg); err2 != nil {
+						t.log("ERROR", fmt.Sprintf("Send failed: %v", err2))
+					}
 				}
 			}
 
@@ -158,4 +164,23 @@ func (t *Telegram) log(level, msg string) {
 	case t.logChan <- types.LogEntry{Level: level, Source: "Telegram", Message: msg, Time: time.Now()}:
 	default:
 	}
+}
+
+// splitMessage chunks a string into a slice of strings, each no longer than limit.
+func splitMessage(text string, limit int) []string {
+	if len(text) <= limit {
+		return []string{text}
+	}
+	var chunks []string
+	runes := []rune(text)
+	for len(runes) > limit {
+		// Hard-split by limit.
+		// Improvement idea: try to split at the nearest newline before the limit.
+		chunks = append(chunks, string(runes[:limit]))
+		runes = runes[limit:]
+	}
+	if len(runes) > 0 {
+		chunks = append(chunks, string(runes))
+	}
+	return chunks
 }

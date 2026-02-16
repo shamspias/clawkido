@@ -241,7 +241,7 @@ func (a *Agent) executeSkills(ctx context.Context, text string) string {
 			args = strings.TrimSpace(sub[2])
 		}
 
-		result := a.Skills.Execute(ctx, name, args)
+		result := a.Skills.Execute(ctx, name, args, a.Name)
 
 		a.EventBus.Publish(types.Event{
 			Type: types.EventSkillExecuted, Source: a.Name,
