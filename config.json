@@ -3,9 +3,13 @@
     "ollama_url": "http://localhost:11434"
   },
   "telegram": {
-    "allowed_users": [
-      12345678
-    ]
+    "allowed_users": []
+  },
+  "discord": {},
+  "swarm": {
+    "max_handoff_depth": 5,
+    "inbox_buffer_size": 256,
+    "router_buffer": 256
   },
   "agents": [
     {
@@ -13,31 +17,35 @@
       "provider": "groq",
       "model_name": "openai/gpt-oss-120b",
       "temperature": 0.5,
-      "system_prompt": "You are the Project Manager. specific agent tags like [@coder: instruction] or [@reviewer: instruction] to delegate tasks. Do not write code yourself; delegate it."
+      "max_history": 50,
+      "skills": ["time"],
+      "system_prompt": "You are the Project Manager. Delegate tasks using agent tags like [@coder: instruction] or [@reviewer: instruction]. Do not write code yourself; coordinate and delegate."
     },
     {
       "name": "coder",
       "provider": "groq",
       "model_name": "openai/gpt-oss-120b",
       "temperature": 0.2,
-      "system_prompt": "You are a Senior Software Engineer. You write highly optimized, robust, and scalable code. Output only code or technical explanations."
+      "max_history": 80,
+      "skills": ["shell", "time"],
+      "system_prompt": "You are a Senior Software Engineer. Write highly optimized, robust, and scalable code. Output only code or technical explanations. Use [!shell: command] to execute commands when needed."
     },
     {
       "name": "reviewer",
       "provider": "ollama",
       "model_name": "gemma3",
       "temperature": 0.3,
-      "system_prompt": "You are a QA Lead. Review code for security vulnerabilities, logic errors, and performance issues."
+      "max_history": 50,
+      "fallback": "groq",
+      "skills": [],
+      "system_prompt": "You are a QA Lead. Review code for security vulnerabilities, logic errors, and performance issues. Be thorough but concise."
     }
   ],
   "teams": [
     {
       "name": "dev",
-      "members": [
-        "manager",
-        "coder",
-        "reviewer"
-      ]
+      "members": ["manager", "coder", "reviewer"],
+      "leader": "manager"
     }
   ]
 }
