@@ -1,29 +1,51 @@
-# Variables
-BINARY_NAME=clawkido
-MAIN_PATH=cmd/clawkido/main.go
+BINARY_NAME := clawkido
+MAIN_PATH   := cmd/clawkido/main.go
+VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS     := -s -w -X main.version=$(VERSION)
 
-# Default target (runs when you just type 'make')
+.PHONY: all build run clean deps lint vet test fmt release
+
 all: build
 
-# Build the binary
 build:
-	@echo "🦞 Building Clawkido..."
-	go build -o $(BINARY_NAME) $(MAIN_PATH)
+	@echo "🦞 Building Clawkido $(VERSION)..."
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) $(MAIN_PATH)
+	@echo "✅ Built: ./$(BINARY_NAME)"
 
-# Build and Run immediately
 run: build
-	@echo "🚀 Running Clawkido..."
+	@echo "🚀 Starting Clawkido..."
 	./$(BINARY_NAME)
 
-# Remove binary and cleanup
-clean:
-	@echo "🧹 Cleaning up..."
-	go clean
-	rm -f $(BINARY_NAME)
-	rm -f $(BINARY_NAME).exe
+fmt:
+	@echo "📐 Formatting..."
+	gofmt -s -w .
 
-# Update dependencies
+vet:
+	@echo "🔍 Vetting..."
+	go vet ./...
+
+lint: vet
+	@echo "🧹 Linting..."
+	@which golangci-lint > /dev/null 2>&1 && golangci-lint run ./... || echo "  (golangci-lint not installed, skipping)"
+
+test:
+	@echo "🧪 Running tests..."
+	go test -race -cover ./...
+
 deps:
 	@echo "📦 Downloading dependencies..."
 	go mod download
 	go mod tidy
+
+clean:
+	@echo "🧹 Cleaning..."
+	go clean
+	rm -f $(BINARY_NAME) $(BINARY_NAME).exe
+
+release:
+	@echo "📦 Building release binaries..."
+	@mkdir -p dist
+	GOOS=linux   GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/$(BINARY_NAME)-linux-amd64   $(MAIN_PATH)
+	GOOS=darwin  GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/$(BINARY_NAME)-darwin-arm64  $(MAIN_PATH)
+	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/$(BINARY_NAME)-windows.exe  $(MAIN_PATH)
+	@echo "✅ Release binaries in ./dist/"
