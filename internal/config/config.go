@@ -9,12 +9,13 @@ import (
 )
 
 type Config struct {
-	AI       AIConfig       `json:"ai"`
-	Telegram TelegramConfig `json:"telegram"`
-	Discord  DiscordConfig  `json:"discord"`
-	Agents   []AgentConfig  `json:"agents"`
-	Teams    []TeamConfig   `json:"teams"`
-	Swarm    SwarmConfig    `json:"swarm"`
+	AI          AIConfig            `json:"ai"`
+	Telegram    TelegramConfig      `json:"telegram"`
+	Discord     DiscordConfig       `json:"discord"`
+	SkillGroups map[string][]string `json:"skill_groups"`
+	Agents      []AgentConfig       `json:"agents"`
+	Teams       []TeamConfig        `json:"teams"`
+	Swarm       SwarmConfig         `json:"swarm"`
 }
 
 type AIConfig struct {
@@ -40,6 +41,7 @@ type AgentConfig struct {
 	Temperature  float64  `json:"temperature"`
 	SystemPrompt string   `json:"system_prompt"`
 	MaxHistory   int      `json:"max_history"`
+	Groups       []string `json:"groups"`
 	Skills       []string `json:"skills"`
 	Fallback     string   `json:"fallback"`
 }
@@ -75,6 +77,7 @@ func Load(path string) (*Config, error) {
 	cfg.Discord.Token = os.Getenv("DISCORD_BOT_TOKEN")
 
 	cfg.applyDefaults()
+	cfg.expandSkillGroups() // Merge groups into skills
 	cfg.normalize()
 
 	if err := cfg.validate(); err != nil {
@@ -82,6 +85,37 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// expandSkillGroups merges skills from 'groups' into the 'skills' list for each agent.
+func (c *Config) expandSkillGroups() {
+	for i := range c.Agents {
+		agent := &c.Agents[i]
+
+		// Use a map to deduplicate skills
+		skillSet := make(map[string]bool)
+
+		// 1. Add existing individual skills
+		for _, s := range agent.Skills {
+			skillSet[s] = true
+		}
+
+		// 2. Add skills from referenced groups
+		for _, groupName := range agent.Groups {
+			if groupSkills, ok := c.SkillGroups[groupName]; ok {
+				for _, s := range groupSkills {
+					skillSet[s] = true
+				}
+			}
+		}
+
+		// 3. Rebuild the Skills slice
+		merged := make([]string, 0, len(skillSet))
+		for s := range skillSet {
+			merged = append(merged, s)
+		}
+		agent.Skills = merged
+	}
 }
 
 func (c *Config) applyDefaults() {
